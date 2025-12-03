@@ -5,6 +5,7 @@ Scans files and repositories for hardcoded secrets using regex patterns and entr
 """
 
 import argparse
+import json
 import math
 import re
 from pathlib import Path
@@ -267,6 +268,9 @@ def main():
     """Main entry point for the CLI tool."""
     parser = argparse.ArgumentParser(description='Scan files and directories for hardcoded secrets')
     parser.add_argument('path', help='File or directory to scan')
+    parser.add_argument('--json', '-j', metavar='FILE', help='Export results to JSON file')
+    parser.add_argument('--format', choices=['text', 'json'], default='text', 
+                        help='Output format (default: text)')
     args = parser.parse_args()
     
     scanner = SecretScanner()
@@ -277,25 +281,57 @@ def main():
     for finding in findings:
         risk_counts[finding['risk']] += 1
     
-    print(f"\n{'='*50}")
-    print(f"Found {len(findings)} potential secrets")
-    print(f"  HIGH: {risk_counts['HIGH']} | MEDIUM: {risk_counts['MEDIUM']} | LOW: {risk_counts['LOW']}")
-    print(f"{'='*50}\n")
+    # If JSON format requested, output JSON to stdout
+    if args.format == 'json':
+        output = {
+            'summary': {
+                'total': len(findings),
+                'high': risk_counts['HIGH'],
+                'medium': risk_counts['MEDIUM'],
+                'low': risk_counts['LOW']
+            },
+            'findings': findings
+        }
+        print(json.dumps(output, indent=2))
     
-    # Display each finding
-    for finding in findings:
-        risk_display = get_risk_color(finding['risk'])
-        print(f"[{finding['type']}] - Risk: {risk_display}")
-        print(f"  File: {finding['file']}")
-        print(f"  Line: {finding['line']}")
-        print(f"  Value: {finding['value']}")
+    # Otherwise, display text format
+    else:
+        print(f"\n{'='*50}")
+        print(f"Found {len(findings)} potential secrets")
+        print(f"  HIGH: {risk_counts['HIGH']} | MEDIUM: {risk_counts['MEDIUM']} | LOW: {risk_counts['LOW']}")
+        print(f"{'='*50}\n")
         
-        # Show entropy if available
-        if 'entropy' in finding:
-            print(f"  Entropy: {finding['entropy']:.2f}")
+        # Display each finding
+        for finding in findings:
+            risk_display = get_risk_color(finding['risk'])
+            print(f"[{finding['type']}] - Risk: {risk_display}")
+            print(f"  File: {finding['file']}")
+            print(f"  Line: {finding['line']}")
+            print(f"  Value: {finding['value']}")
+            
+            # Show entropy if available
+            if 'entropy' in finding:
+                print(f"  Entropy: {finding['entropy']:.2f}")
+            
+            print(f"  Context: {finding['context'][:80]}...")  # First 80 chars
+            print()
+    
+    # Save to JSON file if requested
+    if args.json:
+        output = {
+            'summary': {
+                'total': len(findings),
+                'high': risk_counts['HIGH'],
+                'medium': risk_counts['MEDIUM'],
+                'low': risk_counts['LOW']
+            },
+            'findings': findings
+        }
         
-        print(f"  Context: {finding['context'][:80]}...")  # First 80 chars
-        print()
+        with open(args.json, 'w') as f:
+            json.dump(output, f, indent=2)
+        
+        print(f"\n✓ Results saved to {args.json}")
 
 
 if __name__ == '__main__':
