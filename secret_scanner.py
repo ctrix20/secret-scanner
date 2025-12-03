@@ -42,6 +42,12 @@ class SecretScanner:
         """
         Calculate risk level for a finding.
         
+        Risk Criteria:
+        - HIGH: Known critical patterns (AWS keys, GitHub tokens, private keys)
+                or entropy >= 5.0
+        - MEDIUM: Generic API keys or entropy >= 4.5 and < 5.0
+        - LOW: Entropy < 4.5
+        
         Args:
             finding_type: Type of secret found
             entropy: Entropy value (if applicable)
