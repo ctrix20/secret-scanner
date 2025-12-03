@@ -9,7 +9,7 @@ aws_secret_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 github_token = "ghp_1234567890abcdefghijklmnopqrstuvwxyz"
 
 # Fake API key (high entropy)
-api_key = "sk_live_51H8K9jL2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6"
+api_key = "sk_test_FaKeApIkEy123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ"
 
 # Private key header
 private_key = """
