@@ -28,6 +28,41 @@ class SecretScanner:
             'Generic API Key': r'api[_-]?key["\s:=]+["\']?[0-9a-zA-Z]{32,}["\']?',
             'Private Key': r'-----BEGIN .* PRIVATE KEY-----',
         }
+        
+        # Risk levels for different secret types
+        self.risk_levels = {
+            'AWS Access Key': 'HIGH',
+            'GitHub Token': 'HIGH',
+            'Private Key': 'HIGH',
+            'Generic API Key': 'MEDIUM',
+        }
+    
+    def calculate_risk(self, finding_type, entropy=None):
+        """
+        Calculate risk level for a finding.
+        
+        Args:
+            finding_type: Type of secret found
+            entropy: Entropy value (if applicable)
+            
+        Returns:
+            String: 'HIGH', 'MEDIUM', or 'LOW'
+        """
+        # Check if it's a known pattern with assigned risk
+        if finding_type in self.risk_levels:
+            return self.risk_levels[finding_type]
+        
+        # For high-entropy strings, base risk on entropy value
+        if entropy is not None:
+            if entropy >= 5.0:
+                return 'HIGH'
+            elif entropy >= 4.5:
+                return 'MEDIUM'
+            else:
+                return 'LOW'
+        
+        # Default to medium risk
+        return 'MEDIUM'
     
     def scan_directory(self, path):
         """
@@ -104,8 +139,10 @@ class SecretScanner:
                         match = re.search(pattern, line)
                         if match:
                             # Found a secret! Save the details
+                            risk = self.calculate_risk(pattern_name)
                             findings.append({
                                 'type': pattern_name,
+                                'risk': risk,
                                 'file': str(filepath),
                                 'line': line_num,
                                 'value': match.group(),
@@ -115,8 +152,12 @@ class SecretScanner:
                     # Method 2: Check for high-entropy strings
                     high_entropy = self.find_high_entropy_strings(line)
                     for item in high_entropy:
+                        entropy_val = item['entropy']
+                        risk = self.calculate_risk('High Entropy String', entropy=entropy_val)
                         findings.append({
-                            'type': f'High Entropy String (entropy: {item["entropy"]:.2f})',
+                            'type': f'High Entropy String',
+                            'risk': risk,
+                            'entropy': entropy_val,
                             'file': str(filepath),
                             'line': line_num,
                             'value': item['value'],
@@ -201,6 +242,27 @@ class SecretScanner:
         return high_entropy_strings
 
 
+def get_risk_color(risk):
+    """
+    Get ANSI color code for risk level.
+    
+    Args:
+        risk: Risk level string ('HIGH', 'MEDIUM', 'LOW')
+        
+    Returns:
+        ANSI color code string
+    """
+    colors = {
+        'HIGH': '\033[91m',      # Red
+        'MEDIUM': '\033[93m',    # Yellow
+        'LOW': '\033[92m',       # Green
+    }
+    reset = '\033[0m'  # Reset color
+    
+    color = colors.get(risk, '')
+    return f"{color}{risk}{reset}"
+
+
 def main():
     """Main entry point for the CLI tool."""
     parser = argparse.ArgumentParser(description='Scan files and directories for hardcoded secrets')
@@ -210,16 +272,28 @@ def main():
     scanner = SecretScanner()
     findings = scanner.scan_directory(args.path)
     
+    # Count findings by risk level
+    risk_counts = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+    for finding in findings:
+        risk_counts[finding['risk']] += 1
+    
     print(f"\n{'='*50}")
     print(f"Found {len(findings)} potential secrets")
+    print(f"  HIGH: {risk_counts['HIGH']} | MEDIUM: {risk_counts['MEDIUM']} | LOW: {risk_counts['LOW']}")
     print(f"{'='*50}\n")
     
     # Display each finding
     for finding in findings:
-        print(f"[{finding['type']}]")
+        risk_display = get_risk_color(finding['risk'])
+        print(f"[{finding['type']}] - Risk: {risk_display}")
         print(f"  File: {finding['file']}")
         print(f"  Line: {finding['line']}")
         print(f"  Value: {finding['value']}")
+        
+        # Show entropy if available
+        if 'entropy' in finding:
+            print(f"  Entropy: {finding['entropy']:.2f}")
+        
         print(f"  Context: {finding['context'][:80]}...")  # First 80 chars
         print()
 
