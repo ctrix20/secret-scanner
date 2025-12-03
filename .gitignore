@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Output files
+*.json
+results/
+output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files (we'll keep test_samples.py but ignore any test output)
+test_output/
