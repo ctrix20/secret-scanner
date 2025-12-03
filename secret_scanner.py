@@ -5,6 +5,7 @@ Scans files and repositories for hardcoded secrets using regex patterns and entr
 """
 
 import argparse
+import math
 import re
 from pathlib import Path
 
@@ -12,10 +13,13 @@ from pathlib import Path
 class SecretScanner:
     """Main scanner class for detecting secrets in files."""
     
-    def __init__(self):
+    def __init__(self, min_entropy=4.5):
         """Initialize the scanner with directories to skip."""
         # Directories we should skip (common non-code folders)
         self.skip_dirs = {'.git', 'node_modules', '__pycache__', '.venv', 'venv'}
+        
+        # Minimum entropy threshold for detecting high-entropy strings
+        self.min_entropy = min_entropy
         
         # Regex patterns for detecting secrets
         self.patterns = {
@@ -95,7 +99,7 @@ class SecretScanner:
             with open(filepath, 'r', encoding='utf-8') as f:
                 # Read line by line (memory efficient for large files)
                 for line_num, line in enumerate(f, start=1):
-                    # Check each pattern against this line
+                    # Method 1: Check regex patterns
                     for pattern_name, pattern in self.patterns.items():
                         match = re.search(pattern, line)
                         if match:
@@ -107,6 +111,17 @@ class SecretScanner:
                                 'value': match.group(),
                                 'context': line.strip()
                             })
+                    
+                    # Method 2: Check for high-entropy strings
+                    high_entropy = self.find_high_entropy_strings(line)
+                    for item in high_entropy:
+                        findings.append({
+                            'type': f'High Entropy String (entropy: {item["entropy"]:.2f})',
+                            'file': str(filepath),
+                            'line': line_num,
+                            'value': item['value'],
+                            'context': line.strip()
+                        })
         
         except UnicodeDecodeError:
             # Skip binary files (images, executables, etc.)
@@ -116,6 +131,74 @@ class SecretScanner:
             print(f"Warning: Could not scan {filepath}: {e}")
         
         return findings
+    
+    def calculate_entropy(self, string):
+        """
+        Calculate Shannon entropy of a string.
+        Higher entropy = more random/unpredictable.
+        
+        Args:
+            string: The string to analyze
+            
+        Returns:
+            Float representing entropy (0 = not random, 5+ = very random)
+        """
+        if not string:
+            return 0.0
+        
+        # Count how many times each character appears
+        char_counts = {}
+        for char in string:
+            char_counts[char] = char_counts.get(char, 0) + 1
+        
+        # Calculate entropy using Shannon's formula
+        entropy = 0.0
+        length = len(string)
+        
+        for count in char_counts.values():
+            # Probability of this character
+            probability = count / length
+            # Add to entropy (negative because log of fraction is negative)
+            entropy -= probability * math.log2(probability)
+        
+        return entropy
+    
+    def find_high_entropy_strings(self, line):
+        """
+        Find strings in a line that have high entropy (likely secrets).
+        
+        Args:
+            line: Line of text to analyze
+            
+        Returns:
+            List of high-entropy strings found
+        """
+        high_entropy_strings = []
+        
+        # Look for quoted strings or long alphanumeric sequences
+        # Pattern finds: "text", 'text', or sequences of 20+ alphanumeric chars
+        patterns = [
+            r'["\']([a-zA-Z0-9+/=_\-]{20,})["\']',  # Quoted strings
+            r'(?<![a-zA-Z0-9])([a-zA-Z0-9+/=_\-]{32,})(?![a-zA-Z0-9])',  # Long sequences
+        ]
+        
+        for pattern in patterns:
+            matches = re.finditer(pattern, line)
+            for match in matches:
+                # Get the actual string (group 1 if it exists, otherwise group 0)
+                string = match.group(1) if match.lastindex else match.group(0)
+                
+                # Calculate entropy
+                entropy = self.calculate_entropy(string)
+                
+                # If entropy is high enough, it might be a secret
+                if entropy >= self.min_entropy:
+                    high_entropy_strings.append({
+                        'value': string,
+                        'entropy': entropy
+                    })
+        
+        return high_entropy_strings
 
 
 def main():
